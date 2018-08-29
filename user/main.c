@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
+#include <errno.h>
 #include "plclkfreq.h"
 
 int setfreq(unsigned long rate)
@@ -56,12 +57,13 @@ int main(int argc, char *argv[])
     if (!strcmp(argv[1], "set")) {
       if (argc < 3) return 1;
       rate = strtoul(argv[2], NULL, 10);
-      return setfreq(rate);
+      ret = setfreq(rate);
+      return ret < 0 ? errno : 0;
     }
 
     else if (!strcmp(argv[1], "get")) {
       ret = getfreq(&rate);
-      if (ret < 0) return ret;
+      if (ret < 0) return errno;
       printf("%lu\n", rate);
       return 0;
     }
