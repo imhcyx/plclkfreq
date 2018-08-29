@@ -20,31 +20,45 @@ static struct clk *clk;
 static int register_device(void);
 static void unregister_device(void);
 
-ssize_t plclkfreq_read(
-    struct file *file_ptr,
-    char __user *user_buffer,
-    size_t count,
-    loff_t *position)
+static long plclkfreq_ioctl(
+    struct file *filp,
+    unsigned int cmd,
+    unsigned long arg)
 {
 
-  char buf[16];
-  int len;
-  len = sprintf(buf, "%ld\n", clk_get_rate(clk));
+  unsigned long rate;
+  unsigned long __user *u_ratep;
 
-  if (*position >= len) 
-    return 0;
-  if (*position + count > len)
-    count = len - *position;
-  if (copy_to_user(user_buffer, buf + *position, count))
-    return -EFAULT;
-  *position += count;
-  return count;
+  switch (cmd) {
+
+    case PLCLKFREQ_IOCTFREQ:
+
+      rate = arg;
+      // TODO: range check
+
+      return clk_set_rate(clk, rate);
+
+    case PLCLKFREQ_IOCGFREQ:
+
+      /* check accessibility */
+      u_ratep = (unsigned long __user *)arg;
+      if (!access_ok(VERIFY_WRITE, u_ratep, sizeof(unsigned long)))
+        return -EFAULT;
+
+      rate = clk_get_rate(clk);
+      return __put_user(rate, u_ratep);
+
+    default:
+
+      return -ENOTTY;
+
+  }
 
 }
 
 static const struct file_operations plclkfreq_fops = {
-  .owner  = THIS_MODULE,
-  .read   = plclkfreq_read,
+  .owner          = THIS_MODULE,
+  .unlocked_ioctl = plclkfreq_ioctl,
 };
 
 static int register_device(void)
@@ -52,8 +66,8 @@ static int register_device(void)
 
   int ret;
 
+  printk(KERN_NOTICE DEV_NAME ": registering device\n");
   /* allocate device number */
-  printk(KERN_NOTICE DEV_NAME ": allocating device number\n");
   ret = alloc_chrdev_region(&dev_num, 0, 1, DEV_NAME);
   if (ret < 0) {
     printk(KERN_WARNING DEV_NAME ": failed to allocate device number with error %d\n", ret);
@@ -74,7 +88,6 @@ static int register_device(void)
     printk(KERN_WARNING DEV_NAME ": failed to add cdev with error %d\n", ret);
     goto errexit;
   }
-  printk(KERN_NOTICE DEV_NAME ": successfully added cdev\n");
 
   return 0;
 
@@ -99,7 +112,7 @@ static int __init plclkfreq_init(void)
 {
 
   int ret;
-  struct device_node *np;
+  struct device_node *np = NULL;
   int plclkid = -1;
   
   ret = register_device();
@@ -145,6 +158,7 @@ static int __init plclkfreq_init(void)
   }
 
   of_node_put(np);
+  np = NULL;
 
   if (IS_ERR(clk)) {
     printk(KERN_WARNING DEV_NAME ": failed to acquire clock with error %ld\n", -PTR_ERR(clk));
@@ -152,12 +166,16 @@ static int __init plclkfreq_init(void)
     goto err_get_clk;
   }
 
-  clk_set_rate(clk, 20000000); // TODO
-  //clk_enable(clk);
+  ret = clk_enable(clk);
+  if (ret < 0) {
+    printk(KERN_WARNING DEV_NAME ": failed to enable clock with error %d\n", ret);
+    goto err_get_clk;
+  }
 
   return 0;
 
 err_get_clk:
+  if (np) of_node_put(np);
   unregister_device();
 err_reg_dev:
   return ret;
@@ -166,7 +184,7 @@ err_reg_dev:
 
 static void __exit plclkfreq_exit(void)
 {
-  //clk_disable(clk);
+  clk_disable(clk);
   unregister_device();
 }
 
