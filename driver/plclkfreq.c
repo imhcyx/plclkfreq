@@ -16,6 +16,7 @@ static dev_t dev_num;
 static struct cdev *cdev_p;
 
 static struct clk *clk;
+//static int clk_enabled;
 
 static int register_device(void);
 static void unregister_device(void);
@@ -26,6 +27,7 @@ static long plclkfreq_ioctl(
     unsigned long arg)
 {
 
+  int ret;
   unsigned long rate;
   unsigned long __user *u_ratep;
 
@@ -36,7 +38,11 @@ static long plclkfreq_ioctl(
       rate = arg;
       // TODO: range check
 
-      return clk_set_rate(clk, rate);
+      clk_disable(clk);
+      ret = clk_set_rate(clk, rate);
+      clk_enable(clk);
+
+      return ret;
 
     case PLCLKFREQ_IOCGFREQ:
 
@@ -47,6 +53,35 @@ static long plclkfreq_ioctl(
 
       rate = clk_get_rate(clk);
       return __put_user(rate, u_ratep);
+
+    case PLCLKFREQ_IOCTENABLE:
+
+      if (arg) {
+
+        /* enable clock */
+
+        //if (clk_enabled) return 0;
+
+        ret = clk_enable(clk);
+        if (ret < 0) return ret;
+
+        //clk_enabled = 1;
+        return 0;
+
+      }
+
+      else {
+
+        /* disable clock */
+
+        //if (!clk_enabled) return 0;
+
+        clk_disable(clk);
+
+        //clk_enabled = 0;
+        return 0;
+
+      }
 
     default:
 
@@ -113,69 +148,28 @@ static int __init plclkfreq_init(void)
 
   int ret;
   struct device_node *np = NULL;
-  int plclkid = -1;
   
   ret = register_device();
   if (ret < 0)
     goto err_reg_dev;
 
-  np = of_find_compatible_node(NULL, NULL, "xlnx,zynqmp-clkc");
+  np = of_find_node_by_name(NULL, "fclk0");
   if (!np) {
-    printk(KERN_WARNING DEV_NAME ": failed to find clk provider\n");
+    printk(KERN_WARNING DEV_NAME ": failed to find fclk node\n");
     goto err_get_clk;
   }
 
-  /* get id of plclk */
-  {
-    struct property *prop;
-    const char *s;
-    int i = 0;
-
-    of_property_for_each_string(np, "clock-output-names", prop, s) {
-      if (!strcmp(s, "pl0")) {
-        plclkid = i;
-        break;
-      }
-      i++;
-    }
-    if (plclkid < 0) {
-      printk(KERN_WARNING DEV_NAME ": failed to get plclkid\n");
-      goto err_get_clk;
-    }
-  }
-  printk(KERN_NOTICE DEV_NAME ": index of pl0 is %d\n", plclkid);
-
-  /* acquire clk device */
-  {
-    struct of_phandle_args clkspec;
-
-    // TODO: should we fill clkspec ourselves?
-    clkspec.np = np;
-    clkspec.args_count = 1;
-    clkspec.args[0] = plclkid;
-
-    clk = of_clk_get_from_provider(&clkspec);
-  }
-
+  clk = of_clk_get(np, 0);
   of_node_put(np);
   np = NULL;
-
   if (IS_ERR(clk)) {
     printk(KERN_WARNING DEV_NAME ": failed to acquire clock with error %ld\n", -PTR_ERR(clk));
     ret = PTR_ERR(clk);
     goto err_get_clk;
   }
 
-  ret = clk_enable(clk);
-  if (ret < 0) {
-    printk(KERN_WARNING DEV_NAME ": failed to enable clock with error %d\n", ret);
-    goto err_enable_clk;
-  }
-
   return 0;
 
-err_enable_clk:
-  clk_put(clk);
 err_get_clk:
   if (np) of_node_put(np);
   unregister_device();
@@ -186,7 +180,7 @@ err_reg_dev:
 
 static void __exit plclkfreq_exit(void)
 {
-  clk_disable(clk);
+  //if (clk_enabled) clk_disable(clk);
   clk_put(clk);
   unregister_device();
 }

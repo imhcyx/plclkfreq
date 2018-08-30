@@ -46,6 +46,25 @@ int getfreq(unsigned long *rate)
 
 }
 
+int enable(int enabled)
+{
+
+  int fd;
+  int ret;
+
+  fd = open("/dev/plclkfreq", O_RDWR);
+  if (fd < 0) {
+    return fd;
+  }
+
+  ret = ioctl(fd, PLCLKFREQ_IOCTENABLE, enabled);
+  
+  close(fd);
+
+  return ret;
+
+}
+
 int main(int argc, char *argv[])
 {
 
@@ -66,6 +85,16 @@ int main(int argc, char *argv[])
       if (ret < 0) return errno;
       printf("%lu\n", rate);
       return 0;
+    }
+
+    else if (!strcmp(argv[1], "enable")) {
+      ret = enable(1);
+      return ret < 0 ? errno : 0;
+    }
+
+    else if (!strcmp(argv[1], "disable")) {
+      ret = enable(0);
+      return ret < 0 ? errno : 0;
     }
 
     else {
