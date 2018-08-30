@@ -169,11 +169,13 @@ static int __init plclkfreq_init(void)
   ret = clk_enable(clk);
   if (ret < 0) {
     printk(KERN_WARNING DEV_NAME ": failed to enable clock with error %d\n", ret);
-    goto err_get_clk;
+    goto err_enable_clk;
   }
 
   return 0;
 
+err_enable_clk:
+  clk_put(clk);
 err_get_clk:
   if (np) of_node_put(np);
   unregister_device();
@@ -185,6 +187,7 @@ err_reg_dev:
 static void __exit plclkfreq_exit(void)
 {
   clk_disable(clk);
+  clk_put(clk);
   unregister_device();
 }
 
