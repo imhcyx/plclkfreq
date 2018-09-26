@@ -16,8 +16,6 @@ static dev_t dev_num;
 static struct cdev *cdev_p;
 
 static struct clk *clk;
-//static int clk_enabled;
-//static struct clk *mux, *div0, *div1; // for debug
 
 static int register_device(void);
 static void unregister_device(void);
@@ -39,18 +37,7 @@ static long plclkfreq_ioctl(
       rate = arg;
       // TODO: range check
 
-      //printk(KERN_NOTICE DEV_NAME ": requested freq %lu\n", rate);
-
-      //clk_disable(clk);
       ret = clk_set_rate(clk, rate);
-      //clk_enable(clk);
-      //if (ret >= 0)
-      //  printk(KERN_NOTICE DEV_NAME ": adjusted to %lu mux %lu div0 %lu div1 %lu\n",
-      //      clk_get_rate(clk),
-      //      clk_get_rate(mux),
-      //      clk_get_rate(div0),
-      //      clk_get_rate(div1)
-      //      );
 
       return ret;
 
@@ -70,12 +57,9 @@ static long plclkfreq_ioctl(
 
         /* enable clock */
 
-        //if (clk_enabled) return 0;
-
         ret = clk_enable(clk);
         if (ret < 0) return ret;
 
-        //clk_enabled = 1;
         return 0;
 
       }
@@ -84,11 +68,8 @@ static long plclkfreq_ioctl(
 
         /* disable clock */
 
-        //if (!clk_enabled) return 0;
-
         clk_disable(clk);
 
-        //clk_enabled = 0;
         return 0;
 
       }
@@ -178,11 +159,6 @@ static int __init plclkfreq_init(void)
     goto err_get_clk;
   }
 
-  // for debug
-  //div1 = clk_get_parent(clk);
-  //div0 = clk_get_parent(div1);
-  //mux = clk_get_parent(div0);
-
   return 0;
 
 err_get_clk:
@@ -195,7 +171,6 @@ err_reg_dev:
 
 static void __exit plclkfreq_exit(void)
 {
-  //if (clk_enabled) clk_disable(clk);
   clk_put(clk);
   unregister_device();
 }
